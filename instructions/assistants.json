@@ -1,0 +1,17 @@
+{
+  "Default Gemini Assistant": {
+    "icon": "♊️",
+    "intro": "I'm your default Gemini Assistant, how can I help you?",
+    "instructions": "None"
+  },
+  "Role Summarizer": {
+    "icon": "📝",
+    "intro": "Give me a job description and I'll summarize all of the important parts for you.",
+    "instructions": "instructions/role_summarizer_instructions.txt"
+  },
+  "Role to Resume Analysis": {
+    "icon": "📝",
+    "intro": "I'm here to analyze your resume and tell you how well it fits the job you're applying for. Give me your resume and the job description of the job you're applying for.",
+    "instructions": "instructions/role_resume_match_analysis_instructions.txt"
+  }
+}
