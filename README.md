@@ -1,1 +1,1 @@
-# Google-Gemin-API-Streamlit-Chat
+# Google-Gemini-API-Streamlit-Chat
