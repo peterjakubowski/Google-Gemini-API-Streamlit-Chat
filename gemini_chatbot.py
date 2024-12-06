@@ -112,6 +112,19 @@ class Assistants:
 
         return
 
+    def get_doc_string(self):
+        """
+        Constructs a string with the names and descriptions of all available assistants.
+        :return: string
+        """
+        doc_string = ("* **Assistant name**: An AI agent/assistant/persona that has been given "
+                      "instructions to perform a specific task.\n")
+        assistant_intros = []
+        for assist in self.list_assistants():
+            assistant_intros.append(f'    * *{assist}*: {self.get_intro(assist)}')
+
+        return doc_string + "\n".join(assistant_intros)
+
 
 def api_config():
     """
@@ -234,13 +247,9 @@ with (st.sidebar):
 
     # Select the gemini model to use
     st.selectbox(label='Model variant',
-                 # options=['gemini-1.5-flash-001',
-                 #          'gemini-1.5-flash-latest',
-                 #          'gemini-1.5-pro-001',
-                 #          'gemini-1.5-pro-latest',
-                 #          ],
-                 options=st.session_state.models.keys(),
-                 key="model_name"
+                 options=sorted(st.session_state.models.keys()),
+                 key="model_name",
+                 index=1
                  )
 
     # Set the model's max output between 64 and 8192
@@ -344,7 +353,6 @@ with (st.sidebar):
             st.stop()
         # add messages to the session state
         st.session_state["messages"] = [{"role": "assistant", "content": introduction}]
-        # st.rerun()
 
     # clear current chat
     if 'chat' in st.session_state:
@@ -362,50 +370,15 @@ if "chat" not in st.session_state:
     # display the title on the page
     st.title(st.session_state.page_title)
     # introduce the application and provide instructions
-    st.markdown("Use the left sidebar to get started with a new chat.\n"
-                "* **Assistant name**: An AI agent/assistant/persona that has be given "
-                "instructions to perform a specific task."
-                "\n\n"
-                "* **Model variants**: "
-                "The Gemini API offers different models that are optimized for specific use cases. "
-                "Here's a brief overview of Gemini variants that are available:\n"
-                "   - Gemini 1.5 Flash: Fast and versatile performance across a diverse variety of tasks\n"
-                "   - Gemini 1.5 Flash-8B: High volume and lower intelligence tasks\n"
-                "   - Gemini 1.5 Pro: Complex reasoning tasks requiring more intelligence"
-                "\n\n"
-                "* **Max output tokens**: The maximum number of tokens to include in a response candidate."
-                "\n\n"
-                "* **Temperature**: Controls the randomness of the output. "
-                "A higher value will produce responses that are more varied, "
-                "while a value closer to 0.0 will typically result in less surprising responses from the model. "
-                "This value specifies default to be used by the backend while making the call to the model."
-                "\n\n"
-                "* **Top p**: The maximum cumulative probability of tokens to consider when sampling. "
-                "The model uses combined Top-k and Top-p (nucleus) sampling. "
-                "Tokens are sorted based on their assigned probabilities "
-                "so that only the most likely tokens are considered. "
-                "Top-k sampling directly limits the maximum number of tokens to consider, "
-                "while Nucleus sampling limits the number of tokens based on the cumulative probability."
-                "\n\n"
-                "* **Top k**: The maximum cumulative probability of tokens to consider when sampling. "
-                "The model uses combined Top-k and Top-p (nucleus) sampling. "
-                "Tokens are sorted based on their assigned probabilities "
-                "so that only the most likely tokens are considered. "
-                "Top-k sampling directly limits the maximum number of tokens to consider, "
-                "while Nucleus sampling limits the number of tokens based on the cumulative probability."
-                "\n\n"
-                "* **Presence penalty**: Presence penalty applied to the next token's logprobs "
-                "if the token has already been seen in the response. "
-                "This penalty is binary on/off and not dependant on the number of times "
-                "the token is used (after the first)."
-                "\n\n"
-                "* **Frequency penalty**: Frequency penalty applied to the next token's logprobs, "
-                "multiplied by the number of times each token has been seen in the response so far. "
-                "A positive penalty will discourage the use of tokens that have already been used, "
-                "proportional to the number of times the token has been used: "
-                "The more a token is used, the more difficult it is for the model to use that token again "
-                "increasing the vocabulary of responses."
-                )
+    st.markdown("Use the left sidebar to get started with a new chat.")
+    st.divider()
+    # list all the assistants with a short description
+    st.markdown(st.session_state.assistants.get_doc_string())
+    st.divider()
+    # display the documentation for model parameters
+    if os.path.exists(params_doc := "instructions/params_doc.md"):
+        with open(params_doc) as doc:
+            st.markdown(doc.read())
 
 # ==================
 # === BEGIN CHAT ===
