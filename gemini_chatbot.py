@@ -39,10 +39,10 @@ class Assistants:
             j = open(self.json_path)
             self.json_data = json.load(j)
             valid_schema = True
-            if type(self.json_data) == dict:
+            if isinstance(self.json_data, dict):
                 for key, val in self.json_data.items():
                     schema = {'icon': False, 'intro': False, 'instructions': False}
-                    if type(val) == dict:
+                    if isinstance(val, dict):
                         for s, _ in val.items():
                             if s in schema:
                                 schema[s] = True
