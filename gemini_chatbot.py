@@ -1,8 +1,12 @@
 import streamlit as st
-import google.generativeai as genai
-from google.generativeai.types.generation_types import StopCandidateException
+# OLD GENAI API
+from google.generativeai import configure, list_models
+# NEW GENAI API
+from google import genai
+from google.genai import types
+# from google.genai.types.generation_types import StopCandidateException
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from google.api_core.exceptions import InvalidArgument, ResourceExhausted
+# from google.api_core.exceptions import InvalidArgument, ResourceExhausted
 import json
 import os
 
@@ -133,18 +137,25 @@ def api_config():
     """
 
     if 'GOOGLE_API_KEY' in st.secrets:
-        genai.configure(api_key=st.secrets['GOOGLE_API_KEY'])
+        # configure a Gemini Client with API key
+        client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
+        configure(api_key=st.secrets['GOOGLE_API_KEY'])
         try:
             genai_model_names = {}
-            for m in genai.list_models():
+            for m in list_models():
+                # for model in ['gemini-2.0-flash-exp']:
+                # m = client.models.get(model=model)
                 if ("Gemini" in m.display_name
                         and "1.0" not in m.display_name
                         and "Tuning" not in m.display_name
-                        and ("002" in m.display_name or "001" in m.display_name)):
+                        and ("002" in m.display_name or "001" in m.display_name or "2.0" in m.display_name)):
                     genai_model_names[m.display_name] = m
-        except InvalidArgument:
-            st.warning("Configuration failed. API key not valid. Please pass a valid API key.")
+        # except InvalidArgument:
+        except Exception as _ex:
+            # st.warning("Configuration failed. API key not valid. Please pass a valid API key.")
+            st.warning(_ex)
             st.stop()
+        st.session_state['client'] = client
         st.session_state['models'] = genai_model_names
         if not st.session_state.models:
             st.warning('Failed to retrieve any models')
@@ -189,32 +200,35 @@ class Model:
         self.frequency_penalty = frequency_penalty
         self.safety_settings = safety_settings
         self.instructions = instructions
-        self.model = genai.GenerativeModel(model_name=self.model_name,
-                                           generation_config=self.model_config(),
-                                           safety_settings=self.safety_settings,
-                                           system_instruction=self.instructions)
+        self.model = st.session_state['client'].chats.create(model=self.model_name,
+                                                             config=self.model_config())
+        # self.model = genai.GenerativeModel(model_name=self.model_name,
+        #                                    generation_config=self.model_config(),
+        #                                    safety_settings=self.safety_settings,
+        #                                    system_instruction=self.instructions)
 
     def model_config(self):
         """
         Create a configuration file for the model
         :return:
         """
+        return types.GenerateContentConfig(max_output_tokens=self.max_output_tokens,
+                                           temperature=self.temperature,
+                                           top_p=self.top_p,
+                                           top_k=self.top_k,
+                                           presence_penalty=self.presence_penalty,
+                                           frequency_penalty=self.frequency_penalty,
+                                           safety_settings=self.safety_settings,
+                                           system_instruction=self.instructions
+                                           )
 
-        return genai.GenerationConfig(max_output_tokens=self.max_output_tokens,
-                                      temperature=self.temperature,
-                                      top_p=self.top_p,
-                                      top_k=self.top_k,
-                                      presence_penalty=self.presence_penalty,
-                                      frequency_penalty=self.frequency_penalty
-                                      )
-
-    def start_chat(self):
-        """
-        Start a new chat session
-        :return:
-        """
-
-        return self.model.start_chat()
+    # def start_chat(self):
+    #     """
+    #     Start a new chat session
+    #     :return:
+    #     """
+    #
+    #     return self.model.start_chat()
 
 
 # ==================
@@ -249,7 +263,7 @@ with (st.sidebar):
     st.selectbox(label='Model variant',
                  options=sorted(st.session_state.models.keys()),
                  key="model_name",
-                 index=1
+                 index=0
                  )
 
     # Set the model's max output between 64 and 8192
@@ -290,7 +304,8 @@ with (st.sidebar):
 
     # A few models support penalty parameters, if a supported model is selected, show the penalty sliders
     if (st.session_state.models[st.session_state.model_name].name in
-            ("models/gemini-1.5-pro-002", "models/gemini-1.5-flash-002", "models/gemini-1.5-flash-8b-001")):
+            ("models/gemini-1.5-pro-002", "models/gemini-1.5-flash-002", "models/gemini-1.5-flash-8b-001",
+             "models/gemini-2.0-flash-exp")):
         # Set the model's presence penalty between -2 and 2
         st.slider(label='Presence penalty',
                   min_value=-2.0,
@@ -326,9 +341,9 @@ with (st.sidebar):
                                                         else st.session_state.presence_penalty),
                                       frequency_penalty=(0 if 'frequency_penalty' not in st.session_state
                                                          else st.session_state.frequency_penalty),
-                                      safety_settings=SAFETY_SETTINGS,
+                                      safety_settings=None,
                                       instructions=assistant_instructions
-                                      ).start_chat()
+                                      ).model
 
         try:
             # send a message (hidden message) to the assistant asking for an introduction
@@ -339,18 +354,21 @@ with (st.sidebar):
                                                            "things that I can expect you to do for me."))
             introduction = response.text
 
-        except ResourceExhausted:
-            st.warning(("Resource has been exhausted (e.g. check quota). "
-                        "Wait 1 minute and try sending your message again."
-                        ))
+        except Exception as ex:
+            st.warning(ex)
             st.stop()
-            # introduction = st.session_state.assistants.get_intro(st.session_state.assistant_name)
-        except InvalidArgument as ia:
-            st.warning(ia.message)
-            st.stop()
-        except StopCandidateException as sce:
-            st.warning(sce)
-            st.stop()
+        # except ResourceExhausted:
+        #     st.warning(("Resource has been exhausted (e.g. check quota). "
+        #                 "Wait 1 minute and try sending your message again."
+        #                 ))
+        #     st.stop()
+        #     # introduction = st.session_state.assistants.get_intro(st.session_state.assistant_name)
+        # except InvalidArgument as ia:
+        #     st.warning(ia.message)
+        #     st.stop()
+        # except StopCandidateException as sce:
+        #     st.warning(sce)
+        #     st.stop()
         # add messages to the session state
         st.session_state["messages"] = [{"role": "assistant", "content": introduction}]
 
@@ -399,14 +417,17 @@ elif "messages" in st.session_state:
         try:
             response = st.session_state.chat.send_message(prompt)
             msg = response.text
-        except ResourceExhausted:
-            st.warning(("Resource has been exhausted (e.g. check quota). "
-                        "Wait 1 minute and try sending your message again."
-                        ))
+        except Exception as ex:
+            st.warning(ex)
             st.stop()
-        except StopCandidateException as sce:
-            st.warning(sce)
-            st.stop()
+        # except ResourceExhausted:
+        #     st.warning(("Resource has been exhausted (e.g. check quota). "
+        #                 "Wait 1 minute and try sending your message again."
+        #                 ))
+        #     st.stop()
+        # except StopCandidateException as sce:
+        #     st.warning(sce)
+        #     st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": msg})
         st.chat_message("assistant").write(msg)
