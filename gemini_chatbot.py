@@ -10,10 +10,19 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import json
 import os
 
-SAFETY_SETTINGS = {HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH}
+SAFETY_SETTINGS = [types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",
+                                       threshold="BLOCK_ONLY_HIGH"),
+                   types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                                       threshold="BLOCK_ONLY_HIGH"),
+                   types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                                       threshold="BLOCK_ONLY_HIGH"),
+                   types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",
+                                       threshold="BLOCK_ONLY_HIGH")]
+
+# SAFETY_SETTINGS = {HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+#                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+#                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+#                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH}
 
 ASSISTANTS = "instructions/assistants.json"
 
@@ -341,7 +350,7 @@ with (st.sidebar):
                                                         else st.session_state.presence_penalty),
                                       frequency_penalty=(0 if 'frequency_penalty' not in st.session_state
                                                          else st.session_state.frequency_penalty),
-                                      safety_settings=None,
+                                      safety_settings=SAFETY_SETTINGS,
                                       instructions=assistant_instructions
                                       ).model
 
