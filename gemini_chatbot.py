@@ -4,8 +4,8 @@ from google.generativeai import configure, list_models
 # NEW GENAI API
 from google import genai
 from google.genai import types
+from google.genai import errors
 # from google.genai.types.generation_types import StopCandidateException
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 # from google.api_core.exceptions import InvalidArgument, ResourceExhausted
 import json
 import os
@@ -18,11 +18,6 @@ SAFETY_SETTINGS = [types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",
                                        threshold="BLOCK_ONLY_HIGH"),
                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",
                                        threshold="BLOCK_ONLY_HIGH")]
-
-# SAFETY_SETTINGS = {HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-#                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-#                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-#                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH}
 
 ASSISTANTS = "instructions/assistants.json"
 
@@ -130,6 +125,7 @@ class Assistants:
         Constructs a string with the names and descriptions of all available assistants.
         :return: string
         """
+
         doc_string = ("* **Assistant name**: An AI agent/assistant/persona that has been given "
                       "instructions to perform a specific task.\n")
         assistant_intros = []
@@ -160,6 +156,9 @@ def api_config():
                         and ("002" in m.display_name or "001" in m.display_name or "2.0" in m.display_name)):
                     genai_model_names[m.display_name] = m
         # except InvalidArgument:
+        except errors.ClientError as ce:
+            st.warning(ce.message)
+            st.stop()
         except Exception as _ex:
             # st.warning("Configuration failed. API key not valid. Please pass a valid API key.")
             st.warning(_ex)
@@ -363,9 +362,19 @@ with (st.sidebar):
                                                            "things that I can expect you to do for me."))
             introduction = response.text
 
-        except Exception as ex:
-            st.warning(ex)
+        except errors.ClientError as ce:
+            st.warning(f'{ce.code}: {ce.message}')
             st.stop()
+        except errors.APIError as ae:
+            st.warning(f'{ae.code}: {ae.message}')
+            st.stop()
+        except errors.Any as any:
+            st.warning('Any')
+            st.stop()
+        except Exception as ex:
+            st.warning("Exception", ex)
+            st.stop()
+        # except
         # except ResourceExhausted:
         #     st.warning(("Resource has been exhausted (e.g. check quota). "
         #                 "Wait 1 minute and try sending your message again."
@@ -426,6 +435,12 @@ elif "messages" in st.session_state:
         try:
             response = st.session_state.chat.send_message(prompt)
             msg = response.text
+        except errors.ClientError as ce:
+            st.warning(ce.message)
+            st.stop()
+        except errors.APIError as ae:
+            st.warning(ae.message)
+            st.stop()
         except Exception as ex:
             st.warning(ex)
             st.stop()
