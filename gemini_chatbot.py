@@ -10,14 +10,14 @@ from google.genai import errors
 import json
 import os
 
-SAFETY_SETTINGS = [types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",
-                                       threshold="BLOCK_ONLY_HIGH"),
-                   types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                                       threshold="BLOCK_ONLY_HIGH"),
-                   types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                                       threshold="BLOCK_ONLY_HIGH"),
-                   types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",
-                                       threshold="BLOCK_ONLY_HIGH")]
+SAFETY_SETTINGS = [types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH)]
 
 ASSISTANTS = "instructions/assistants.json"
 
