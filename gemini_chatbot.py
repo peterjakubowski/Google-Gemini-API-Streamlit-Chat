@@ -1,12 +1,7 @@
 import streamlit as st
-# OLD GENAI API
-from google.generativeai import configure, list_models
-# NEW GENAI API
 from google import genai
 from google.genai import types
 from google.genai import errors
-# from google.genai.types.generation_types import StopCandidateException
-# from google.api_core.exceptions import InvalidArgument, ResourceExhausted
 import json
 import os
 
@@ -144,25 +139,20 @@ def api_config():
     if 'GOOGLE_API_KEY' in st.secrets:
         # configure a Gemini Client with API key
         client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
-        configure(api_key=st.secrets['GOOGLE_API_KEY'])
+
         try:
             genai_model_names = {}
-            for m in list_models():
-                # for model in ['gemini-2.0-flash-exp']:
-                # m = client.models.get(model=model)
+            for m in client.models.list():
                 if ("Gemini" in m.display_name
                         and "1.0" not in m.display_name
                         and "Tuning" not in m.display_name
                         and ("002" in m.display_name or "001" in m.display_name or "2.0" in m.display_name)):
                     genai_model_names[m.display_name] = m
-        # except InvalidArgument:
+
         except errors.ClientError as ce:
-            st.warning(ce.message)
+            st.warning(f"{ce.code} {ce.status}: {ce.message}")
             st.stop()
-        except Exception as _ex:
-            # st.warning("Configuration failed. API key not valid. Please pass a valid API key.")
-            st.warning(_ex)
-            st.stop()
+
         st.session_state['client'] = client
         st.session_state['models'] = genai_model_names
         if not st.session_state.models:
@@ -176,7 +166,7 @@ def api_config():
 class Model:
 
     def __init__(self,
-                 model_name="gemini-1.5-flash-002",
+                 model_name="gemini-2.0-flash-001",
                  max_output_tokens=1024,
                  temperature=0.9,
                  top_p=0.95,
@@ -210,10 +200,6 @@ class Model:
         self.instructions = instructions
         self.model = st.session_state['client'].chats.create(model=self.model_name,
                                                              config=self.model_config())
-        # self.model = genai.GenerativeModel(model_name=self.model_name,
-        #                                    generation_config=self.model_config(),
-        #                                    safety_settings=self.safety_settings,
-        #                                    system_instruction=self.instructions)
 
     def model_config(self):
         """
@@ -229,14 +215,6 @@ class Model:
                                            safety_settings=self.safety_settings,
                                            system_instruction=self.instructions
                                            )
-
-    # def start_chat(self):
-    #     """
-    #     Start a new chat session
-    #     :return:
-    #     """
-    #
-    #     return self.model.start_chat()
 
 
 # ==================
@@ -286,8 +264,10 @@ with (st.sidebar):
     # Set the model's temperature between 0 and 2
     st.slider(label='Temperature',
               min_value=0.0,
-              max_value=st.session_state.models[st.session_state.model_name].max_temperature,
-              value=st.session_state.models[st.session_state.model_name].temperature,
+              max_value=2.0,
+              # max_value=st.session_state.models[st.session_state.model_name].max_temperature,
+              value=0.90,
+              # value=st.session_state.models[st.session_state.model_name].temperature,
               step=0.05,
               key='temperature'
               )
@@ -296,7 +276,8 @@ with (st.sidebar):
     st.slider(label='Top p',
               min_value=0.0,
               max_value=1.0,
-              value=st.session_state.models[st.session_state.model_name].top_p,
+              value=0.95,
+              # value=st.session_state.models[st.session_state.model_name].top_p,
               step=0.05,
               key='top_p'
               )
@@ -304,16 +285,17 @@ with (st.sidebar):
     # Set the model's top k between 1 and 40 or 64 depending on the model
     st.slider(label='Top k',
               min_value=1,
-              max_value=st.session_state.models[st.session_state.model_name].top_k,
-              value=st.session_state.models[st.session_state.model_name].top_k,
+              max_value=40,
+              # max_value=st.session_state.models[st.session_state.model_name].top_k,
+              value=40,
+              # value=st.session_state.models[st.session_state.model_name].top_k,
               step=1,
               key='top_k'
               )
 
     # A few models support penalty parameters, if a supported model is selected, show the penalty sliders
-    if (st.session_state.models[st.session_state.model_name].name in
-            ("models/gemini-1.5-pro-002", "models/gemini-1.5-flash-002", "models/gemini-1.5-flash-8b-001",
-             "models/gemini-2.0-flash-exp")):
+    if (st.session_state.models[st.session_state.model_name].name not in
+            ("models/gemini-1.5-pro-001", "models/gemini-1.5-flash-001")):
         # Set the model's presence penalty between -2 and 2
         st.slider(label='Presence penalty',
                   min_value=-2.0,
@@ -363,30 +345,17 @@ with (st.sidebar):
             introduction = response.text
 
         except errors.ClientError as ce:
-            st.warning(f'{ce.code}: {ce.message}')
+            st.warning(f'{ce.code} {ce.status}: {ce.message}')
             st.stop()
+
         except errors.APIError as ae:
             st.warning(f'{ae.code}: {ae.message}')
             st.stop()
-        except errors.Any as any:
-            st.warning('Any')
+
+        except errors.Any as a:
+            st.warning(f'{a}')
             st.stop()
-        except Exception as ex:
-            st.warning("Exception", ex)
-            st.stop()
-        # except
-        # except ResourceExhausted:
-        #     st.warning(("Resource has been exhausted (e.g. check quota). "
-        #                 "Wait 1 minute and try sending your message again."
-        #                 ))
-        #     st.stop()
-        #     # introduction = st.session_state.assistants.get_intro(st.session_state.assistant_name)
-        # except InvalidArgument as ia:
-        #     st.warning(ia.message)
-        #     st.stop()
-        # except StopCandidateException as sce:
-        #     st.warning(sce)
-        #     st.stop()
+
         # add messages to the session state
         st.session_state["messages"] = [{"role": "assistant", "content": introduction}]
 
@@ -435,23 +404,14 @@ elif "messages" in st.session_state:
         try:
             response = st.session_state.chat.send_message(prompt)
             msg = response.text
+
         except errors.ClientError as ce:
-            st.warning(ce.message)
+            st.warning(f'{ce.code} {ce.status}: {ce.message}')
             st.stop()
+
         except errors.APIError as ae:
             st.warning(ae.message)
             st.stop()
-        except Exception as ex:
-            st.warning(ex)
-            st.stop()
-        # except ResourceExhausted:
-        #     st.warning(("Resource has been exhausted (e.g. check quota). "
-        #                 "Wait 1 minute and try sending your message again."
-        #                 ))
-        #     st.stop()
-        # except StopCandidateException as sce:
-        #     st.warning(sce)
-        #     st.stop()
 
         st.session_state.messages.append({"role": "assistant", "content": msg})
         st.chat_message("assistant").write(msg)
