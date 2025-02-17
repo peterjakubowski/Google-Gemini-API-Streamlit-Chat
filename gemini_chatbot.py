@@ -4,6 +4,8 @@ from google.genai import types
 from google.genai import errors
 import json
 import os
+from PIL import Image
+from io import BytesIO
 
 SAFETY_SETTINGS = [types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
                                        threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
@@ -146,7 +148,7 @@ def api_config():
                 if ("Gemini" in m.display_name
                         and "1.0" not in m.display_name
                         and "Tuning" not in m.display_name
-                        and ("002" in m.display_name or "001" in m.display_name or "2.0" in m.display_name)):
+                        and ("002" in m.display_name or "001" in m.display_name)):
                     genai_model_names[m.display_name] = m
 
         except errors.ClientError as ce:
@@ -213,7 +215,8 @@ class Model:
                                            presence_penalty=self.presence_penalty,
                                            frequency_penalty=self.frequency_penalty,
                                            safety_settings=self.safety_settings,
-                                           system_instruction=self.instructions
+                                           system_instruction=self.instructions,
+                                           tools=[types.Tool(code_execution=types.ToolCodeExecution())]
                                            )
 
 
@@ -403,7 +406,6 @@ elif "messages" in st.session_state:
 
         try:
             response = st.session_state.chat.send_message(prompt)
-            msg = response.text
 
         except errors.ClientError as ce:
             st.warning(f'{ce.code} {ce.status}: {ce.message}')
@@ -413,5 +415,17 @@ elif "messages" in st.session_state:
             st.warning(ae.message)
             st.stop()
 
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        st.chat_message("assistant").write(msg)
+        def process_message(_msg):
+            st.session_state.messages.append({"role": "assistant", "content": _msg})
+            st.chat_message("assistant").write(_msg)
+
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                process_message(part.text)
+            if part.executable_code is not None:
+                process_message(part.executable_code.code)
+            if part.code_execution_result is not None:
+                process_message(part.code_execution_result.output)
+            if part.inline_data is not None:
+                img = Image.open(BytesIO(part.inline_data.data))
+                process_message(img)
