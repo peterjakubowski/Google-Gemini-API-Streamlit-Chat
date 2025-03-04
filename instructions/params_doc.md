@@ -3,6 +3,14 @@
   * *Gemini 1.5 Flash*: Fast and versatile performance across a diverse variety of tasks.
   * *Gemini 1.5 Flash-8B*: High volume and lower intelligence tasks.
   * *Gemini 1.5 Pro*: Complex reasoning tasks requiring more intelligence.
+  * *Gemini 2.0 Flash*: Next generation features, speed, and multimodal generation for a diverse variety of tasks.
+  * *Gemini 2.0 Flash-Lite*: A Gemini 2.0 Flash model optimized for cost efficiency and low latency.
+
+---
+
+* **Tools**:
+  * *Code Execution*: The code execution feature enables the model to generate and run Python code and learn iteratively from the results until it arrives at a final output.
+  * *Google Search*: Starting with Gemini 2.0, Google Search is available as a tool. This means that the model can decide when to use Google Search.
 
 ---
 

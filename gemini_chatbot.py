@@ -1,17 +1,26 @@
 import streamlit as st
-import google.generativeai as genai
-from google.generativeai.types.generation_types import StopCandidateException
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from google.api_core.exceptions import InvalidArgument, ResourceExhausted
+from google import genai
+from google.genai import types
+from google.genai import errors
 import json
 import os
+from PIL import Image
+from io import BytesIO
 
-SAFETY_SETTINGS = {HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                   HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH}
+SAFETY_SETTINGS = [types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
+                   types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                                       threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH)]
 
 ASSISTANTS = "instructions/assistants.json"
+
+TOOLS = {'Code Execution': [types.Tool(code_execution=types.ToolCodeExecution())],
+         'Google Search': [types.Tool(google_search=types.GoogleSearch())]
+         }
 
 
 class Assistants:
@@ -117,6 +126,7 @@ class Assistants:
         Constructs a string with the names and descriptions of all available assistants.
         :return: string
         """
+
         doc_string = ("* **Assistant name**: An AI agent/assistant/persona that has been given "
                       "instructions to perform a specific task.\n")
         assistant_intros = []
@@ -133,18 +143,23 @@ def api_config():
     """
 
     if 'GOOGLE_API_KEY' in st.secrets:
-        genai.configure(api_key=st.secrets['GOOGLE_API_KEY'])
+        # configure a Gemini Client with API key
+        client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
+
         try:
             genai_model_names = {}
-            for m in genai.list_models():
+            for m in client.models.list():
                 if ("Gemini" in m.display_name
                         and "1.0" not in m.display_name
                         and "Tuning" not in m.display_name
                         and ("002" in m.display_name or "001" in m.display_name)):
                     genai_model_names[m.display_name] = m
-        except InvalidArgument:
-            st.warning("Configuration failed. API key not valid. Please pass a valid API key.")
+
+        except errors.ClientError as ce:
+            st.warning(f"{ce.code} {ce.status}: {ce.message}")
             st.stop()
+
+        st.session_state['client'] = client
         st.session_state['models'] = genai_model_names
         if not st.session_state.models:
             st.warning('Failed to retrieve any models')
@@ -157,7 +172,7 @@ def api_config():
 class Model:
 
     def __init__(self,
-                 model_name="gemini-1.5-flash-002",
+                 model_name="gemini-2.0-flash-001",
                  max_output_tokens=1024,
                  temperature=0.9,
                  top_p=0.95,
@@ -165,7 +180,8 @@ class Model:
                  presence_penalty=0,
                  frequency_penalty=0,
                  safety_settings=None,
-                 instructions=None):
+                 instructions=None,
+                 tools=None):
         """
 
         :param model_name:
@@ -177,9 +193,9 @@ class Model:
         :param frequency_penalty:
         :param safety_settings:
         :param instructions:
+        :param tools:
         """
 
-        # api_config()
         self.model_name = model_name
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
@@ -189,32 +205,32 @@ class Model:
         self.frequency_penalty = frequency_penalty
         self.safety_settings = safety_settings
         self.instructions = instructions
-        self.model = genai.GenerativeModel(model_name=self.model_name,
-                                           generation_config=self.model_config(),
-                                           safety_settings=self.safety_settings,
-                                           system_instruction=self.instructions)
+        self.tools = tools
+        self.model = st.session_state['client'].chats.create(model=self.model_name,
+                                                             config=self.model_config())
 
     def model_config(self):
         """
         Create a configuration file for the model
         :return:
         """
-
-        return genai.GenerationConfig(max_output_tokens=self.max_output_tokens,
-                                      temperature=self.temperature,
-                                      top_p=self.top_p,
-                                      top_k=self.top_k,
-                                      presence_penalty=self.presence_penalty,
-                                      frequency_penalty=self.frequency_penalty
-                                      )
-
-    def start_chat(self):
-        """
-        Start a new chat session
-        :return:
-        """
-
-        return self.model.start_chat()
+        return types.GenerateContentConfig(max_output_tokens=self.max_output_tokens,
+                                           temperature=self.temperature,
+                                           top_p=self.top_p,
+                                           top_k=self.top_k,
+                                           presence_penalty=self.presence_penalty,
+                                           frequency_penalty=self.frequency_penalty,
+                                           safety_settings=self.safety_settings,
+                                           system_instruction=self.instructions,
+                                           tools=TOOLS[self.tools] if self.tools else None,
+                                           tool_config=types.ToolConfig(
+                                               function_calling_config=types.FunctionCallingConfig(
+                                                   mode=types.FunctionCallingConfigMode("AUTO"))),
+                                           automatic_function_calling = types.AutomaticFunctionCallingConfig(
+                                               disable=False,
+                                               maximum_remote_calls=10)
+                                           # tools=[types.Tool(code_execution=types.ToolCodeExecution())]
+                                           )
 
 
 # ==================
@@ -249,8 +265,14 @@ with (st.sidebar):
     st.selectbox(label='Model variant',
                  options=sorted(st.session_state.models.keys()),
                  key="model_name",
-                 index=1
+                 index=0
                  )
+
+    # Select tools
+    st.selectbox(label='Tools',
+                 options=[None] + sorted(TOOLS.keys()),
+                 key="tools",
+                 index=0)
 
     # Set the model's max output between 64 and 8192
     st.slider(label='Max output tokens',
@@ -264,8 +286,10 @@ with (st.sidebar):
     # Set the model's temperature between 0 and 2
     st.slider(label='Temperature',
               min_value=0.0,
-              max_value=st.session_state.models[st.session_state.model_name].max_temperature,
-              value=st.session_state.models[st.session_state.model_name].temperature,
+              max_value=2.0,
+              # max_value=st.session_state.models[st.session_state.model_name].max_temperature,
+              value=0.90,
+              # value=st.session_state.models[st.session_state.model_name].temperature,
               step=0.05,
               key='temperature'
               )
@@ -274,7 +298,8 @@ with (st.sidebar):
     st.slider(label='Top p',
               min_value=0.0,
               max_value=1.0,
-              value=st.session_state.models[st.session_state.model_name].top_p,
+              value=0.95,
+              # value=st.session_state.models[st.session_state.model_name].top_p,
               step=0.05,
               key='top_p'
               )
@@ -282,15 +307,16 @@ with (st.sidebar):
     # Set the model's top k between 1 and 40 or 64 depending on the model
     st.slider(label='Top k',
               min_value=1,
-              max_value=st.session_state.models[st.session_state.model_name].top_k,
-              value=st.session_state.models[st.session_state.model_name].top_k,
+              max_value=40,
+              # max_value=st.session_state.models[st.session_state.model_name].top_k,
+              value=40,
+              # value=st.session_state.models[st.session_state.model_name].top_k,
               step=1,
               key='top_k'
               )
-
     # A few models support penalty parameters, if a supported model is selected, show the penalty sliders
-    if (st.session_state.models[st.session_state.model_name].name in
-            ("models/gemini-1.5-pro-002", "models/gemini-1.5-flash-002", "models/gemini-1.5-flash-8b-001")):
+    if (st.session_state.models[st.session_state.model_name].name not in
+            ("models/gemini-1.5-pro-001", "models/gemini-1.5-flash-001")):
         # Set the model's presence penalty between -2 and 2
         st.slider(label='Presence penalty',
                   min_value=-2.0,
@@ -327,8 +353,9 @@ with (st.sidebar):
                                       frequency_penalty=(0 if 'frequency_penalty' not in st.session_state
                                                          else st.session_state.frequency_penalty),
                                       safety_settings=SAFETY_SETTINGS,
-                                      instructions=assistant_instructions
-                                      ).start_chat()
+                                      instructions=assistant_instructions,
+                                      tools=st.session_state.tools
+                                      ).model
 
         try:
             # send a message (hidden message) to the assistant asking for an introduction
@@ -336,21 +363,22 @@ with (st.sidebar):
                                                            "provide a short description of what you have been "
                                                            "instructed to do. "
                                                            "List in bullet format a few of the most important "
-                                                           "things that I can expect you to do for me."))
+                                                           "things that I can expect you to do for me. "
+                                                           "Your response must be no more than 100 words."))
             introduction = response.text
 
-        except ResourceExhausted:
-            st.warning(("Resource has been exhausted (e.g. check quota). "
-                        "Wait 1 minute and try sending your message again."
-                        ))
+        except errors.ClientError as ce:
+            st.warning(f'{ce.code} {ce.status}: {ce.message}')
             st.stop()
-            # introduction = st.session_state.assistants.get_intro(st.session_state.assistant_name)
-        except InvalidArgument as ia:
-            st.warning(ia.message)
+
+        except errors.APIError as ae:
+            st.warning(f'{ae.code}: {ae.message}')
             st.stop()
-        except StopCandidateException as sce:
-            st.warning(sce)
+
+        except errors.Any as a:
+            st.warning(f'{a}')
             st.stop()
+
         # add messages to the session state
         st.session_state["messages"] = [{"role": "assistant", "content": introduction}]
 
@@ -398,15 +426,26 @@ elif "messages" in st.session_state:
 
         try:
             response = st.session_state.chat.send_message(prompt)
-            msg = response.text
-        except ResourceExhausted:
-            st.warning(("Resource has been exhausted (e.g. check quota). "
-                        "Wait 1 minute and try sending your message again."
-                        ))
-            st.stop()
-        except StopCandidateException as sce:
-            st.warning(sce)
+
+        except errors.ClientError as ce:
+            st.warning(f'{ce.code} {ce.status}: {ce.message}')
             st.stop()
 
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        st.chat_message("assistant").write(msg)
+        except errors.APIError as ae:
+            st.warning(ae.message)
+            st.stop()
+
+        def process_message(_msg):
+            st.session_state.messages.append({"role": "assistant", "content": _msg})
+            st.chat_message("assistant").write(_msg)
+
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                process_message(part.text)
+            if part.executable_code is not None:
+                process_message(part.executable_code.code)
+            if part.code_execution_result is not None:
+                process_message(part.code_execution_result.output)
+            if part.inline_data is not None:
+                img = Image.open(BytesIO(part.inline_data.data))
+                process_message(img)
