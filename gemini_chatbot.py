@@ -18,6 +18,10 @@ SAFETY_SETTINGS = [types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY
 
 ASSISTANTS = "instructions/assistants.json"
 
+TOOLS = {'Code Execution': [types.Tool(code_execution=types.ToolCodeExecution())],
+         'Google Search': [types.Tool(google_search=types.GoogleSearch())]
+         }
+
 
 class Assistants:
 
@@ -176,7 +180,8 @@ class Model:
                  presence_penalty=0,
                  frequency_penalty=0,
                  safety_settings=None,
-                 instructions=None):
+                 instructions=None,
+                 tools=None):
         """
 
         :param model_name:
@@ -188,9 +193,9 @@ class Model:
         :param frequency_penalty:
         :param safety_settings:
         :param instructions:
+        :param tools:
         """
 
-        # api_config()
         self.model_name = model_name
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
@@ -200,6 +205,7 @@ class Model:
         self.frequency_penalty = frequency_penalty
         self.safety_settings = safety_settings
         self.instructions = instructions
+        self.tools = tools
         self.model = st.session_state['client'].chats.create(model=self.model_name,
                                                              config=self.model_config())
 
@@ -216,7 +222,14 @@ class Model:
                                            frequency_penalty=self.frequency_penalty,
                                            safety_settings=self.safety_settings,
                                            system_instruction=self.instructions,
-                                           tools=[types.Tool(code_execution=types.ToolCodeExecution())]
+                                           tools=TOOLS[self.tools] if self.tools else None,
+                                           tool_config=types.ToolConfig(
+                                               function_calling_config=types.FunctionCallingConfig(
+                                                   mode=types.FunctionCallingConfigMode("AUTO"))),
+                                           automatic_function_calling = types.AutomaticFunctionCallingConfig(
+                                               disable=False,
+                                               maximum_remote_calls=10)
+                                           # tools=[types.Tool(code_execution=types.ToolCodeExecution())]
                                            )
 
 
@@ -254,6 +267,12 @@ with (st.sidebar):
                  key="model_name",
                  index=0
                  )
+
+    # Select tools
+    st.selectbox(label='Tools',
+                 options=[None] + sorted(TOOLS.keys()),
+                 key="tools",
+                 index=0)
 
     # Set the model's max output between 64 and 8192
     st.slider(label='Max output tokens',
@@ -295,7 +314,6 @@ with (st.sidebar):
               step=1,
               key='top_k'
               )
-
     # A few models support penalty parameters, if a supported model is selected, show the penalty sliders
     if (st.session_state.models[st.session_state.model_name].name not in
             ("models/gemini-1.5-pro-001", "models/gemini-1.5-flash-001")):
@@ -335,7 +353,8 @@ with (st.sidebar):
                                       frequency_penalty=(0 if 'frequency_penalty' not in st.session_state
                                                          else st.session_state.frequency_penalty),
                                       safety_settings=SAFETY_SETTINGS,
-                                      instructions=assistant_instructions
+                                      instructions=assistant_instructions,
+                                      tools=st.session_state.tools
                                       ).model
 
         try:
@@ -344,7 +363,8 @@ with (st.sidebar):
                                                            "provide a short description of what you have been "
                                                            "instructed to do. "
                                                            "List in bullet format a few of the most important "
-                                                           "things that I can expect you to do for me."))
+                                                           "things that I can expect you to do for me. "
+                                                           "Your response must be no more than 100 words."))
             introduction = response.text
 
         except errors.ClientError as ce:
