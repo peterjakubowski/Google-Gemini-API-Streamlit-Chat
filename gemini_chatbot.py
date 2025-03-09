@@ -7,6 +7,11 @@ import os
 from PIL import Image
 from io import BytesIO
 
+
+# =====================
+# === Constant Vars ===
+# =====================
+
 SAFETY_SETTINGS = [types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
                                        threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH),
                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -21,6 +26,10 @@ ASSISTANTS = "instructions/assistants.json"
 TOOLS = {'Code Execution': [types.Tool(code_execution=types.ToolCodeExecution())],
          'Google Search': [types.Tool(google_search=types.GoogleSearch())]
          }
+
+# ========================
+# === Assistants Class ===
+# ========================
 
 
 class Assistants:
@@ -135,6 +144,10 @@ class Assistants:
 
         return doc_string + "\n".join(assistant_intros)
 
+# ========================
+# === Helper Functions ===
+# ========================
+
 
 def api_config():
     """
@@ -167,6 +180,41 @@ def api_config():
     else:
         st.warning('Configuration failed. Missing a an API key.')
         st.stop()
+
+
+def process_message(_part: types.Part) -> None:
+    """
+    Add content parts to the chat and display them.
+
+    :param _part: Message to add to the chat
+    :return: None
+    """
+
+    assert 'messages' in st.session_state, "Cannot find messages in the session state."
+
+    _content = []
+
+    if _part.text is not None:
+        _content.append(_part.text)
+    if _part.executable_code is not None:
+        _content.append(_part.executable_code.code)
+    if _part.code_execution_result is not None:
+        _content.append(_part.code_execution_result.output)
+    if _part.inline_data is not None:
+        img = Image.open(BytesIO(part.inline_data.data))
+        _content.append(img)
+
+    for c in _content:
+        # add the message to the chat
+        st.session_state.messages.append({"role": "assistant", "content": c})
+        # display the message in the chat
+        st.chat_message("assistant").write(c)
+
+    return
+
+# ===================
+# === Model Class ===
+# ===================
 
 
 class Model:
@@ -229,7 +277,6 @@ class Model:
                                            automatic_function_calling = types.AutomaticFunctionCallingConfig(
                                                disable=False,
                                                maximum_remote_calls=10)
-                                           # tools=[types.Tool(code_execution=types.ToolCodeExecution())]
                                            )
 
 
@@ -270,9 +317,9 @@ with (st.sidebar):
 
     # Select tools
     st.selectbox(label='Tools',
-                 options=[None] + sorted(TOOLS.keys()),
+                 options=sorted(TOOLS.keys()),
                  key="tools",
-                 index=0)
+                 index=None)
 
     # Set the model's max output between 64 and 8192
     st.slider(label='Max output tokens',
@@ -314,6 +361,7 @@ with (st.sidebar):
               step=1,
               key='top_k'
               )
+
     # A few models support penalty parameters, if a supported model is selected, show the penalty sliders
     if (st.session_state.models[st.session_state.model_name].name not in
             ("models/gemini-1.5-pro-001", "models/gemini-1.5-flash-001")):
@@ -357,29 +405,8 @@ with (st.sidebar):
                                       tools=st.session_state.tools
                                       ).model
 
-        try:
-            # send a message (hidden message) to the assistant asking for an introduction
-            response = st.session_state.chat.send_message(("Give me a brief overview of what you can help me with, "
-                                                           "provide a short description of what you have been "
-                                                           "instructed to do. "
-                                                           "List in bullet format a few of the most important "
-                                                           "things that I can expect you to do for me. "
-                                                           "Your response must be no more than 100 words."))
-            introduction = response.text
-
-        except errors.ClientError as ce:
-            st.warning(f'{ce.code} {ce.status}: {ce.message}')
-            st.stop()
-
-        except errors.APIError as ae:
-            st.warning(f'{ae.code}: {ae.message}')
-            st.stop()
-
-        except errors.Any as a:
-            st.warning(f'{a}')
-            st.stop()
-
         # add messages to the session state
+        introduction = st.session_state.assistants.get_intro(key=st.session_state.assistant_name)
         st.session_state["messages"] = [{"role": "assistant", "content": introduction}]
 
     # clear current chat
@@ -420,12 +447,38 @@ elif "messages" in st.session_state:
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
     # send a new message to the chat and get a response
-    if prompt := st.chat_input():
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
+    if prompt := st.chat_input(accept_file=True, file_type=["jpg", "png"]):
+        # add prompt text to messages and display it in the chat
+        st.session_state.messages.append({"role": "user", "content": prompt.text})
+        st.chat_message("user").write(prompt.text)
+        # start a list of messages to send to the chat model
+        content = [prompt.text]
+        # process files included in the prompt
+        if prompt.files:
+            # loop through the list of files
+            for file in prompt.files:
+                # check if the file is an image, that's all we'll accept right now
+                if file.type in ('image/jpeg', 'image/png'):
+                    # try to open the uploaded file as an image with Pillow
+                    try:
+                        image = Image.open(file)
+                    except FileNotFoundError:
+                        st.warning(f"Error: Image file not found {file.name}")
+                    except Image.UnidentifiedImageError:
+                        st.warning(f"Error: Cannot identify image file {file.name}")
+                    except IOError:
+                        st.warning(f"Error: An I/O error occurred when opening {file.name}")
+                    except ValueError:
+                        st.warning("Error: Invalid mode or file path.")
+                    # add the open image to the chat, display it, and append it to our list of prompt content
+                    else:
+                        st.session_state.messages.append({"role": "user", "content": image})
+                        st.chat_message("user").write(image)
+                        content.append(image)
 
+        # try to get a response from the chat model with your prompt content
         try:
-            response = st.session_state.chat.send_message(prompt)
+            response = st.session_state.chat.send_message(message=content)
 
         except errors.ClientError as ce:
             st.warning(f'{ce.code} {ce.status}: {ce.message}')
@@ -435,17 +488,9 @@ elif "messages" in st.session_state:
             st.warning(ae.message)
             st.stop()
 
-        def process_message(_msg):
-            st.session_state.messages.append({"role": "assistant", "content": _msg})
-            st.chat_message("assistant").write(_msg)
-
+        # loop through all the parts in the response and display them in the chat
         for part in response.candidates[0].content.parts:
-            if part.text is not None:
-                process_message(part.text)
-            if part.executable_code is not None:
-                process_message(part.executable_code.code)
-            if part.code_execution_result is not None:
-                process_message(part.code_execution_result.output)
-            if part.inline_data is not None:
-                img = Image.open(BytesIO(part.inline_data.data))
-                process_message(img)
+            try:
+                process_message(part)
+            except AssertionError as ae:
+                st.warning(ae.__str__())
