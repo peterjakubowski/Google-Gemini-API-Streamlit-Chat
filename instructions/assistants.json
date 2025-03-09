@@ -1,17 +1,17 @@
 {
   "Default Gemini Assistant": {
     "icon": "♊️",
-    "intro": "The Gemini LLM with no system instructions.",
+    "intro": "Hello! I'm the default Gemini LLM, I have no system instructions. How can I help?",
     "instructions": "None"
   },
   "Role Summarizer": {
     "icon": "📝",
-    "intro": "Give this assistant a job description and it will summarize all of the important parts for you.",
+    "intro": "Hi! I'm here to assistant you by summarizing all the important parts of a job description for you. Give me a job description to get started.",
     "instructions": "instructions/role_summarizer_instructions.txt"
   },
   "Role to Resume Analysis": {
     "icon": "📝",
-    "intro": "This assistant will analyze your resume and tell you how well it fits the job you're applying for. Just copy and paste your resume and the job description into the chat for an in-depth analysis and recommendations on how to tailor your resume for the specific role.",
+    "intro": "Hey there 👋 I'm here to assistant you by analyzing your resume and telling you how well it fits the job you're applying for. Just copy and paste your resume and the job description into the chat for an in-depth analysis and recommendations on how to tailor your resume for the specific role.",
     "instructions": "instructions/role_resume_match_analysis_instructions.txt"
   }
 }
