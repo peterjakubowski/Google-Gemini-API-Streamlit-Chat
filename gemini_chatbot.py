@@ -159,19 +159,24 @@ def api_config():
 
     client = None
 
-    if load_dotenv() and (key := os.getenv('GOOGLE_API_KEY')):
+    # Check env vars for key
+    if key := os.getenv('GOOGLE_API_KEY'):
         client = genai.Client(api_key=key)
-
+    # Check for a .env file and key
+    elif load_dotenv() and (key := os.getenv('GOOGLE_API_KEY')):
+        client = genai.Client(api_key=key)
+    # Try to load key from streamlit secrets
     else:
         try:
             client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
-        except KeyError as ke:
+        except KeyError:
             st.warning('Configuration failed. Missing API key.')
             st.stop()
-        except FileNotFoundError as fe:
+        except FileNotFoundError:
             st.warning('Configuration failed. Missing API key.')
             st.stop()
 
+    # If we set up a client with api key, try to load a list of models
     if client:
         try:
             genai_model_names = {}
@@ -186,6 +191,7 @@ def api_config():
             st.warning(f"{ce.code} {ce.status}: {ce.message}")
             st.stop()
         else:
+            # Keep the client and model names in
             st.session_state['models'] = genai_model_names
             st.session_state['client'] = client
 
@@ -241,7 +247,9 @@ class Model:
                  frequency_penalty=0,
                  safety_settings=None,
                  instructions=None,
-                 tools=None):
+                 tools=None,
+                 modalities=None):
+
         """
 
         :param model_name:
@@ -266,6 +274,7 @@ class Model:
         self.safety_settings = safety_settings
         self.instructions = instructions
         self.tools = tools
+        self.modalities = modalities
         self.model = st.session_state['client'].chats.create(model=self.model_name,
                                                              config=self.model_config())
 
@@ -289,7 +298,7 @@ class Model:
                                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
                                                disable=False,
                                                maximum_remote_calls=10),
-                                           response_modalities=["Text", "Image"]
+                                           response_modalities=self.modalities
                                            )
 
 
@@ -333,6 +342,12 @@ with (st.sidebar):
                  options=sorted(TOOLS.keys()),
                  key="tools",
                  index=None)
+
+    # Select modalities
+    st.multiselect(label='Response Modalities',
+                   options=['Text', 'Image'],
+                   key='modalities',
+                   default=['Text'])
 
     # Set the model's max output between 64 and 8192
     st.slider(label='Max output tokens',
@@ -415,7 +430,8 @@ with (st.sidebar):
                                                          else st.session_state.frequency_penalty),
                                       safety_settings=SAFETY_SETTINGS,
                                       instructions=assistant_instructions,
-                                      tools=st.session_state.tools
+                                      tools=st.session_state.tools,
+                                      modalities=st.session_state.modalities
                                       ).model
 
         # add messages to the session state
