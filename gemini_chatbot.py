@@ -6,6 +6,8 @@ import json
 import os
 from PIL import Image
 from io import BytesIO
+import os
+from dotenv import load_dotenv
 
 
 # =====================
@@ -155,30 +157,32 @@ def api_config():
     :return:
     """
 
-    if 'GOOGLE_API_KEY' in st.secrets:
+    if st.secrets and 'GOOGLE_API_KEY' in st.secrets:
         # configure a Gemini Client with API key
         client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
-
-        try:
-            genai_model_names = {}
-            for m in client.models.list():
-                if ("Gemini" in m.display_name
-                        and "1.0" not in m.display_name
-                        and "Tuning" not in m.display_name
-                        and ("002" in m.display_name or "001" in m.display_name)):
-                    genai_model_names[m.display_name] = m
-
-        except errors.ClientError as ce:
-            st.warning(f"{ce.code} {ce.status}: {ce.message}")
-            st.stop()
-
-        st.session_state['client'] = client
-        st.session_state['models'] = genai_model_names
-        if not st.session_state.models:
-            st.warning('Failed to retrieve any models')
-            st.stop()
+    elif load_dotenv():
+        client = genai.Client(api_key=os.getenv('GOOGLE_API_KEY'))
     else:
         st.warning('Configuration failed. Missing a an API key.')
+        st.stop()
+
+    try:
+        genai_model_names = {}
+        for m in client.models.list():
+            if ("Gemini" in m.display_name
+                    and "1.0" not in m.display_name
+                    and "Tuning" not in m.display_name
+                    and ("002" in m.display_name or "001" in m.display_name or "Exp" in m.display_name)):
+                genai_model_names[m.display_name] = m
+
+    except errors.ClientError as ce:
+        st.warning(f"{ce.code} {ce.status}: {ce.message}")
+        st.stop()
+
+    st.session_state['client'] = client
+    st.session_state['models'] = genai_model_names
+    if not st.session_state.models:
+        st.warning('Failed to retrieve any models')
         st.stop()
 
 
@@ -274,9 +278,10 @@ class Model:
                                            tool_config=types.ToolConfig(
                                                function_calling_config=types.FunctionCallingConfig(
                                                    mode=types.FunctionCallingConfigMode("AUTO"))),
-                                           automatic_function_calling = types.AutomaticFunctionCallingConfig(
+                                           automatic_function_calling=types.AutomaticFunctionCallingConfig(
                                                disable=False,
-                                               maximum_remote_calls=10)
+                                               maximum_remote_calls=10),
+                                           response_modalities=["Text", "Image"]
                                            )
 
 
@@ -447,7 +452,7 @@ elif "messages" in st.session_state:
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
     # send a new message to the chat and get a response
-    if prompt := st.chat_input(accept_file=True, file_type=["jpg", "png"]):
+    if prompt := st.chat_input(accept_file="multiple", file_type=["jpg", "png"]):
         # add prompt text to messages and display it in the chat
         st.session_state.messages.append({"role": "user", "content": prompt.text})
         st.chat_message("user").write(prompt.text)
