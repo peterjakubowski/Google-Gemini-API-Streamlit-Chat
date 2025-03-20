@@ -166,9 +166,11 @@ def api_config():
         try:
             client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
         except KeyError as ke:
-            st.warning('Configuration failed. Missing a an API key.')
+            st.warning('Configuration failed. Missing API key.')
+            st.stop()
         except FileNotFoundError as fe:
-            st.warning('Configuration failed. Missing a an API key.')
+            st.warning('Configuration failed. Missing API key.')
+            st.stop()
 
     if client:
         try:
