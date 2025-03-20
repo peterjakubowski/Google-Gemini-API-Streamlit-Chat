@@ -157,31 +157,37 @@ def api_config():
     :return:
     """
 
-    if st.secrets and 'GOOGLE_API_KEY' in st.secrets:
-        # configure a Gemini Client with API key
-        client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
-    elif load_dotenv():
-        client = genai.Client(api_key=os.getenv('GOOGLE_API_KEY'))
+    client = None
+
+    if load_dotenv() and (key := os.getenv('GOOGLE_API_KEY')):
+        client = genai.Client(api_key=key)
+
     else:
-        st.warning('Configuration failed. Missing a an API key.')
-        st.stop()
+        try:
+            client = genai.Client(api_key=st.secrets['GOOGLE_API_KEY'])
+        except KeyError as ke:
+            st.warning('Configuration failed. Missing a an API key.')
+        except FileNotFoundError as fe:
+            st.warning('Configuration failed. Missing a an API key.')
 
-    try:
-        genai_model_names = {}
-        for m in client.models.list():
-            if ("Gemini" in m.display_name
-                    and "1.0" not in m.display_name
-                    and "Tuning" not in m.display_name
-                    and ("002" in m.display_name or "001" in m.display_name or "Exp" in m.display_name)):
-                genai_model_names[m.display_name] = m
+    if client:
+        try:
+            genai_model_names = {}
+            for m in client.models.list():
+                if ("Gemini" in m.display_name
+                        and "1.0" not in m.display_name
+                        and "Tuning" not in m.display_name
+                        and ("002" in m.display_name or "001" in m.display_name or "Exp" in m.display_name)):
+                    genai_model_names[m.display_name] = m
 
-    except errors.ClientError as ce:
-        st.warning(f"{ce.code} {ce.status}: {ce.message}")
-        st.stop()
+        except errors.ClientError as ce:
+            st.warning(f"{ce.code} {ce.status}: {ce.message}")
+            st.stop()
+        else:
+            st.session_state['models'] = genai_model_names
+            st.session_state['client'] = client
 
-    st.session_state['client'] = client
-    st.session_state['models'] = genai_model_names
-    if not st.session_state.models:
+    if 'models' not in st.session_state:
         st.warning('Failed to retrieve any models')
         st.stop()
 
