@@ -219,7 +219,7 @@ def process_message(_part: types.Part) -> None:
     if _part.code_execution_result is not None:
         _content.append(_part.code_execution_result.output)
     if _part.inline_data is not None:
-        img = Image.open(BytesIO(part.inline_data.data))
+        img = Image.open(BytesIO(_part.inline_data.data))
         _content.append(img)
 
     for c in _content:
