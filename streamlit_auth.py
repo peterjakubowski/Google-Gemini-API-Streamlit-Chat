@@ -15,3 +15,5 @@ else:
 
 if st.button(label="Logout"):
     st.logout()
+
+st.write(st.secrets)
